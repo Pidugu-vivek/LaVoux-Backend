@@ -1,14 +1,18 @@
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import userRouter from '../../../routes/userRoute.js';
 import orderRouter from '../../../routes/orderRoute.js';
 import orderModel from '../../../models/orderModel.js';
 import userModel from '../../../models/userModel.js';
 
 dotenv.config();
+
+// Increase timeout for CI
+jest.setTimeout(30000);
 
 // Need both routers since we login through user router
 const userApp = express();
@@ -22,10 +26,17 @@ app.use('/api/order', orderRouter);
 describe('Order API - Critical Tests Only', () => {
   let userToken, adminToken;
   const uniqueEmail = `ordertest${Date.now()}@apitest.com`;
+  let mongoServer;
 
   beforeAll(async () => {
     if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.TEST_MONGODB_URI || process.env.MONGODB_URI);
+      const uri = process.env.TEST_MONGODB_URI || process.env.MONGODB_URI;
+      if (uri) {
+        await mongoose.connect(uri);
+      } else {
+        mongoServer = await MongoMemoryServer.create();
+        await mongoose.connect(mongoServer.getUri());
+      }
     }
 
     // Register and login user
@@ -58,6 +69,9 @@ describe('Order API - Critical Tests Only', () => {
     await orderModel.deleteMany({ 'address.firstName': /^Test/ });
     await userModel.deleteMany({ email: { $regex: /@apitest\.com$/ } });
     await mongoose.connection.close();
+    if (mongoServer) {
+      await mongoServer.stop();
+    }
   });
 
   describe('User Orders', () => {

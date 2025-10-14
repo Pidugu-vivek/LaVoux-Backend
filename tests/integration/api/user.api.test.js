@@ -3,10 +3,14 @@ import request from 'supertest';
 import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import userRouter from '../../../routes/userRoute.js';
 import userModel from '../../../models/userModel.js';
 
 dotenv.config();
+
+// Increase default timeout for slower CI environments
+jest.setTimeout(30000);
 
 const app = express();
 app.use(express.json());
@@ -15,16 +19,26 @@ app.use('/api/user', userRouter);
 describe('User API - Critical Tests Only', () => {
   let userToken;
   const uniqueEmail = `test${Date.now()}@apitest.com`;
+  let mongoServer;
 
   beforeAll(async () => {
     if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.TEST_MONGODB_URI || process.env.MONGODB_URI);
+      const uri = process.env.TEST_MONGODB_URI || process.env.MONGODB_URI;
+      if (uri) {
+        await mongoose.connect(uri);
+      } else {
+        mongoServer = await MongoMemoryServer.create();
+        await mongoose.connect(mongoServer.getUri());
+      }
     }
   });
 
   afterAll(async () => {
     await userModel.deleteMany({ email: { $regex: /@apitest\.com$/ } });
     await mongoose.connection.close();
+    if (mongoServer) {
+      await mongoServer.stop();
+    }
   });
 
   describe('Registration & Login', () => {

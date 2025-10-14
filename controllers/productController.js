@@ -38,7 +38,9 @@ const addProduct = async (req, res) => {
 
         const product = new productModel(productData);
         await product.save();
-        await redisClient.del('products:all');
+        if (redisClient && redisClient.isOpen) {
+            await redisClient.del('products:all');
+        }
 
         res.json({ success: true, message: "Product Added" })
 
@@ -52,14 +54,18 @@ const addProduct = async (req, res) => {
 const listProducts = async (req, res) => {
     const cacheKey = 'products:all';
     try {
-        const cachedProducts = await redisClient.get(cacheKey);
-        if (cachedProducts) {
-            return res.json({ success: true, products: JSON.parse(cachedProducts) });
+        if (redisClient && redisClient.isOpen) {
+            const cachedProducts = await redisClient.get(cacheKey);
+            if (cachedProducts) {
+                return res.json({ success: true, products: JSON.parse(cachedProducts) });
+            }
         }
 
         const products = await productModel.find({});
         // Cache for 1 hour
-        await redisClient.setEx(cacheKey, 3600, JSON.stringify(products));
+        if (redisClient && redisClient.isOpen) {
+            await redisClient.setEx(cacheKey, 3600, JSON.stringify(products));
+        }
 
         res.json({ success: true, products });
 
@@ -74,7 +80,9 @@ const removeProduct = async (req, res) => {
     try {
         
         await productModel.findByIdAndDelete(req.body.id);
-        await redisClient.del('products:all');
+        if (redisClient && redisClient.isOpen) {
+            await redisClient.del('products:all');
+        }
         res.json({success:true,message:"Product Removed"});
 
     } catch (error) {
@@ -125,7 +133,9 @@ const updateProduct = async (req, res) => {
         product.image = updatedImageUrls.filter(Boolean); // Update the product's image array
 
         await product.save();
-        await redisClient.del('products:all');
+        if (redisClient && redisClient.isOpen) {
+            await redisClient.del('products:all');
+        }
         res.json({ success: true, message: 'Product updated successfully' });
 
     } catch (error) {
